@@ -1,7 +1,6 @@
 import pyodbc
 from datetime import datetime
 
-
 class DataBaseManager:
     def __init__(self):
         self.server = "localhost"
@@ -93,9 +92,29 @@ class DataBaseManager:
         except Exception as e:
             return f"Hata oluştu. Hata kodu {e}"
 
+    def tum_programlari_listele(self):
+        self.cursor.execute("SELECT * FROM Program")
+        programlar = self.cursor.fetchall()
+        return programlar
+
+    def ture_gore_arama(self, tur):
+        self.cursor.execute("SELECT TurID FROM Tur WHERE TurAdi = ?", (tur,))
+        turıd = self.cursor.fetchone()
+
+        self.cursor.execute("SELECT * FROM ProgramTur WHERE TurID = ?", (turıd[0],))
+        programlarıd = self.cursor.fetchall()
+        programlar = []
+
+        for programıd in programlarıd:
+            self.cursor.execute("SELECT * FROM Program WHERE ProgramID = ?", (programıd[0]))
+            program = self.cursor.fetchone()
+            programlar.append(program)
+            return programlar
+
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
+    db.ture_gore_arama("Drama")
     db.disconnect()
 
 #Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
