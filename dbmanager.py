@@ -97,3 +97,6 @@ if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
     db.disconnect()
+
+#Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
+#Kayıt olurken türlerin ıdleri ile alıyo isimleri ile almalı
