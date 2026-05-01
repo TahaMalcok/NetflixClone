@@ -13,6 +13,7 @@ conn_str = (
     f"TrustServerCertificate=yes;"
 )
 
+#Dbye filmleri ekleyen fonksiyon.
 try :
     conn = pyodbc.connect(conn_str)
     cursor = conn.cursor()
@@ -72,3 +73,21 @@ finally:
         cursor.close()
     if "conn" in locals():
         conn.close()
+
+#Dbye rolleri ekleyen fonksiyon. Db arayüzünden de yapabilirsin burdan yapcaksan ctrl k crtl u yap bütün bölüme yorumdan çıksı yukardaki fonksiyonu da aynı şekilde yoruma al
+# try:
+#     conn = pyodbc.connect(conn_str)
+#     cursor = conn.cursor()
+#
+#     a = "Kullanıcı"
+#     b = "Yönetici"
+#
+#     cursor.execute("INSERT INTO Rol(RolAdi) VALUES (?)", (a,))
+#     cursor.execute("INSERT INTO Rol(RolAdi) VALUES (?)",(b))
+#     print("Tamamlandı")
+#     conn.commit()
+#
+#     cursor.close()
+#     conn.close()
+# except Exception as e:
+#     print(f"Hata: {e}")

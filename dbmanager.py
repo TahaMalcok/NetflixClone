@@ -1,4 +1,6 @@
 import pyodbc
+from datetime import datetime
+
 
 class DataBaseManager:
     def __init__(self):
@@ -28,6 +30,68 @@ class DataBaseManager:
             self.cursor.close()
             self.conn.close()
             print("Veritabanı bağlantısı kapatıldı.")
+
+    def giris_yap(self, email, sifre):
+        try:
+            self.cursor.execute("""
+                SELECT KullaniciID, RolID, Ad, Soyad
+                FROM Kullanici
+                WHERE Email = ? AND Sifre = ?
+            """, (email, sifre))
+
+            kullanici = self.cursor.fetchone()
+            print(kullanici)
+
+            if kullanici:
+                self.cursor.execute("INSERT INTO OturumLog (KullaniciID) VALUES (?)", (kullanici[0],))
+                self.conn.commit()
+                print(f"Hoşgeldin {kullanici[2]} {kullanici[3]}")
+                return kullanici
+            else:
+                print("Hatalı email veya şifre.")
+                return None
+        except Exception as e:
+            print(f"Giriş sırasında hata oluştu. Hata kodu{e}")
+            return None
+
+    def kayit_yap(self, ad, soyad, email, sifre, dogum_yili, cinsiyet, ulke, secilen_turler):
+        try:
+            self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Email = ?", (email,))
+            if self.cursor.fetchone():
+                return "Bu mail adresi ile oluşturulmuş bir hesap bulunmakta."
+            if len(sifre) < 6 or len(sifre) > 50:
+                return "Şifre en az 6 karakter uzunluğunda en fazla 50 karakter uzunluğunda olabilir."
+            if len(secilen_turler) != 3:
+                return "3 tane favori türünüzü seçmeniz gerekiyor."
+
+            try:
+                dogum_tarihi = datetime.strptime(dogum_yili, "%Y-%m-%d").date()
+                bugun = datetime.now().date()
+                if dogum_tarihi > bugun:
+                    return "Geçerli bir doğum tarihi giriniz."
+            except ValueError:
+                return "Geçerli formatta bir tarih giriniz. (YYYY-AA-GG)"
+
+            rol_ıd = 1
+
+            self.cursor.execute("""
+                INSERT INTO Kullanici(RolID, Ad, Soyad, Ulke, Cinsiyet, DogumTarihi, Email, Sifre)
+                OUTPUT INSERTED.KullaniciID
+                Values(?, ?, ?, ?, ?, ?, ?, ?)
+                """, (rol_ıd, ad, soyad, ulke, cinsiyet, dogum_yili, email, sifre))
+
+            yeni_kullanici_ıd = self.cursor.fetchone()[0]
+
+            for tur_ıd in secilen_turler:
+                self.cursor.execute("""
+                    INSERT INTO KullaniciTur(KullaniciID, TurID) VALUES (?, ?) 
+                    """, (yeni_kullanici_ıd, tur_ıd))
+
+            self.conn.commit()
+            return "Kayıt başarılı."
+
+        except Exception as e:
+            return f"Hata oluştu. Hata kodu {e}"
 
 if __name__ == "__main__":
     db = DataBaseManager()
