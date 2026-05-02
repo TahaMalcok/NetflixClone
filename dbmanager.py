@@ -30,13 +30,10 @@ class DataBaseManager:
             self.conn.close()
             print("Veritabanı bağlantısı kapatıldı.")
 
-    def oturum_log(self, ad):
-        self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Ad = ?", (ad,))
-        kullaniciıd = self.cursor.fetchone()
-
+    def oturum_log(self, kullaniciıd):
         self.cursor.execute("""
             INSERT INTO OturumLog (KullaniciID) VALUES (?)
-        """, (kullaniciıd[0]))
+        """, (kullaniciıd,))
 
     def giris_yap(self, email, sifre):
         try:
@@ -86,13 +83,13 @@ class DataBaseManager:
                 OUTPUT INSERTED.KullaniciID
                 Values(?, ?, ?, ?, ?, ?, ?, ?)
                 """, (rol_ıd, ad, soyad, ulke, cinsiyet, dogum_yili, email, sifre))
-
             yeni_kullanici_ıd = self.cursor.fetchone()[0]
 
-            for tur_ıd in secilen_turler:
-                self.cursor.execute("""
-                    INSERT INTO KullaniciTur(KullaniciID, TurID) VALUES (?, ?) 
-                    """, (yeni_kullanici_ıd, tur_ıd))
+            for tur in secilen_turler:
+                self.cursor.execute("SELECT TurID FROM Tur WHERE TurAdi = ?", (tur,))
+                tur_ıd = self.cursor.fetchone()[0]
+
+                self.cursor.execute("INSERT INTO KullaniciTur(KullaniciID, TurID) VALUES (?, ?)", (yeni_kullanici_ıd, tur_ıd))
 
             self.conn.commit()
             return "Kayıt başarılı."
@@ -100,43 +97,78 @@ class DataBaseManager:
         except Exception as e:
             return f"Hata oluştu. Hata kodu {e}"
 
+    def ortalama_puan_hesapla(self, program):
+        try:
+            self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
+            programıd = self.cursor.fetchone()
+
+            self.cursor.execute("""
+                SELECT ISNULL(AVG(CAST(Puan AS FLOAT)), 0)
+                FROM KullaniciProgram
+                WHERE ProgramID = ?
+                """, (programıd[0],))
+
+            ortalama = self.cursor.fetchone()[0]
+            return round(ortalama, 1)
+        except Exception as e:
+            return f"Hata oluştu: {e} hata kodu."
+
     def tum_programlari_listele(self):
-        self.cursor.execute("SELECT * FROM Program")
-        programlar = self.cursor.fetchall()
-        return programlar
+        try:
+            self.cursor.execute("""
+            SELECT
+                p.ProgramID,
+                p.ProgramAdi,
+                p.Tip,
+                p.Aciklama,
+                p.YayinYili,
+                p.BolumSayisi,
+                ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+            FROM Program p
+            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+            GROUP BY
+                p.ProgramID, p.ProgramAdi, p.Tip, p.Aciklama, p.YayinYili, p.BolumSayisi
+            ORDER BY p.ProgramAdi ASC
+            """)
+
+            return self.cursor.fetchall()
+        except Exception as e:
+            return f"Hata oluştu: {e} hata kodu."
 
     def ture_gore_arama(self, tur):
-        self.cursor.execute("SELECT TurID FROM Tur WHERE TurAdi = ?", (tur,))
-        turıd = self.cursor.fetchone()
-
-        self.cursor.execute("SELECT * FROM ProgramTur WHERE TurID = ?", (turıd[0],))
-        programlarıd = self.cursor.fetchall()
-        programlar = []
-
-        for programıd in programlarıd:
-            self.cursor.execute("SELECT * FROM Program WHERE ProgramID = ?", (programıd[0]))
-            program = self.cursor.fetchone()
-            programlar.append(program)
-            return programlar
+        try:
+            self.cursor.execute("""
+                SELECT p.*
+                FROM Program
+                INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+                INNER JOIN Tur t ON pt.TurID = t.TurID
+                WHERE t.TurAdi = ?
+            """, (tur,))
+            return self.cursor.fetchall()
+        except Exception as e:
+            return f"Hata oluştu: {e} hata kodu."
 
     def filtrele(self, tip):
-        self.cursor.execute("SELECT * FROM Program WHERE Tip = ?", (tip,))
-        programlar = self.cursor.fetchall()
+        try:
+            self.cursor.execute("SELECT * FROM Program WHERE Tip = ?", (tip,))
+            programlar = self.cursor.fetchall()
 
-        print(programlar)
+            return programlar
+        except Exception as e:
+            return f"Hata oluştu: {e} hata kodu."
 
-    def favori_ekle(self, program, kullaniciID):
-        self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
-        programıd = self.cursor.fetchone()
-        self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullaniciID, programıd[0]))
-        self.conn.commit()
+    def favori_ekle(self, program, kullaniciıd):
+        try:
+            self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
+            programıd = self.cursor.fetchone()
+            self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullaniciıd, programıd[0]))
+            self.conn.commit()
+        except Exception as e:
+            return f"Hata oluştu: {e} hata kodu."
 
-    def puanlama(self, kullanici, program, puan):
+    def puanlama(self, kullaniciıd, program, puan):
         if not ( 1 <= puan <= 10):
             return "Hata: Puan 1 ile 10 arasında olmalı."
-
-        self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Ad = ?", (kullanici,))
-        kullaniciıd = self.cursor.fetchone()
 
         self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
         programıd = self.cursor.fetchone()
@@ -146,16 +178,15 @@ class DataBaseManager:
                 SELECT Puan FROM KullaniciProgram
                 WHERE KullaniciID = ? AND ProgramID = ?
             """, (kullaniciıd[0], programıd[0]))
-
             mevcutkayit = self.cursor.fetchone()
 
             if mevcutkayit:
                 self.cursor.execute("""
-                    INSERT INTO KullaniciProgram (KullaniciID, ProgramID, Puan)
-                    VALUES (?, ?, ?)
-                """, (kullaniciıd, programıd, puan))
+                    UPDATE KullaniciProgram 
+                    SET Puan = ?
+                    WHERE KullaniciID = ? AND ProgramID = ?
+                """, (puan, kullaniciıd, programıd))
                 mesaj = "Puanınız başarıyla güncelle."
-
             else:
                 self.cursor.execute("""
                     INSERT INTO KullaniciProgram(KullaniciID, ProgramID, Puan)
@@ -167,10 +198,6 @@ class DataBaseManager:
         except Exception as e:
             self.conn.rollback()
             return f"Puanlama sırasında hata oluştu: {e}"
-
-
-        self.cursor.execute("INSERT INTO KullaniciProgram (KullaniciID, ProgramID, Puan) VALUES ?, ?, ?", (kullaniciıd[0], programıd[0], puan))
-        self.conn.commit()
 
 if __name__ == "__main__":
     db = DataBaseManager()
