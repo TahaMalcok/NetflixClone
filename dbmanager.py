@@ -30,6 +30,14 @@ class DataBaseManager:
             self.conn.close()
             print("Veritabanı bağlantısı kapatıldı.")
 
+    def oturum_log(self, ad):
+        self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Ad = ?", (ad,))
+        kullaniciıd = self.cursor.fetchone()
+
+        self.cursor.execute("""
+            INSERT INTO OturumLog (KullaniciID) VALUES (?)
+        """, (kullaniciıd[0]))
+
     def giris_yap(self, email, sifre):
         try:
             self.cursor.execute("""
@@ -123,9 +131,51 @@ class DataBaseManager:
         self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullaniciID, programıd[0]))
         self.conn.commit()
 
+    def puanlama(self, kullanici, program, puan):
+        if not ( 1 <= puan <= 10):
+            return "Hata: Puan 1 ile 10 arasında olmalı."
+
+        self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Ad = ?", (kullanici,))
+        kullaniciıd = self.cursor.fetchone()
+
+        self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
+        programıd = self.cursor.fetchone()
+
+        try:
+            self.cursor.execute("""
+                SELECT Puan FROM KullaniciProgram
+                WHERE KullaniciID = ? AND ProgramID = ?
+            """, (kullaniciıd[0], programıd[0]))
+
+            mevcutkayit = self.cursor.fetchone()
+
+            if mevcutkayit:
+                self.cursor.execute("""
+                    INSERT INTO KullaniciProgram (KullaniciID, ProgramID, Puan)
+                    VALUES (?, ?, ?)
+                """, (kullaniciıd, programıd, puan))
+                mesaj = "Puanınız başarıyla güncelle."
+
+            else:
+                self.cursor.execute("""
+                    INSERT INTO KullaniciProgram(KullaniciID, ProgramID, Puan)
+                    VALUES (?, ?, ?)
+                """, (kullaniciıd[0], programıd[0], puan))
+                mesaj = "Puanınız başarıyla kaydedildi."
+            self.conn.commit()
+            return mesaj
+        except Exception as e:
+            self.conn.rollback()
+            return f"Puanlama sırasında hata oluştu: {e}"
+
+
+        self.cursor.execute("INSERT INTO KullaniciProgram (KullaniciID, ProgramID, Puan) VALUES ?, ?, ?", (kullaniciıd[0], programıd[0], puan))
+        self.conn.commit()
+
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
+    db.oturum_log("Ahmet")
     db.disconnect()
 
 #Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
