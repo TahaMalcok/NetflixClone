@@ -111,10 +111,21 @@ class DataBaseManager:
             programlar.append(program)
             return programlar
 
+    def filtrele(self, tip):
+        self.cursor.execute("SELECT * FROM Program WHERE Tip = ?", (tip,))
+        programlar = self.cursor.fetchall()
+
+        print(programlar)
+
+    def favori_ekle(self, program, kullaniciID):
+        self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
+        programıd = self.cursor.fetchone()
+        self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullaniciID, programıd[0]))
+        self.conn.commit()
+
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
-    db.ture_gore_arama("Drama")
     db.disconnect()
 
 #Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
