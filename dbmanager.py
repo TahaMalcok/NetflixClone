@@ -229,10 +229,115 @@ class DataBaseManager:
             self.conn.rollback()
             print(f"Hata meydana geldi. Hata kodu:{e}")
 
+    def profil_bilgileri(self, kullanici_id):
+        try:
+            self.cursor.execute("""
+                SELECT Ad, Soyad, Email, DogumTarihi, Ulke
+                FROM Kullanici 
+                WHERE KullaniciID = ?
+            """, (kullanici_id,))
+            bilgiler = self.cursor.fetchone()
+
+            self.cursor.execute("""
+                SELECT t.Turadi
+                FROM Tur t
+                INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
+                WHERE kt.KullaniciID = ?
+            """, (kullanici_id,))
+            turler = [satir[0] for satir in self.cursor.fetchall()]
+
+            self.cursor.execute("""
+                SELECT ISNULL(SUM(IzlenenSure), 0) FROM IzlemeLog
+                WHERE KullaniciID = ?
+            """, (kullanici_id,))
+            sure = self.cursor.fetchone()[0]
+
+            self.cursor.execute("""
+                SELECT ISNULL(AVG(CAST(Puan AS FLOAT)), 0) 
+                FROM KullaniciProgram 
+                WHERE KullaniciID = ?
+            """, (kullanici_id,))
+            puan = self.cursor.fetchone()[0]
+
+            profil_bilgileri = {
+                "Ad": bilgiler[0],
+                "Soyad": bilgiler[1],
+                "Email": bilgiler[2],
+                "DoğumTarihi": bilgiler[3].strftime("%d/%m/%Y"),
+                "Ülke": bilgiler[4],
+                "FavoriTürler": turler,
+                "İzlenenSüre": sure,
+                "OrtalamaPuan": puan,
+            }
+
+            return profil_bilgileri
+        except Exception as e:
+            return f"Hata oluştu: Hata kodu {e}"
+
+    def sifre_güncelleme(self, kullanici_ıd, yeni_sifre):
+        try:
+            self.cursor.execute("""
+                UPDATE Kullanici 
+                SET Sifre = ?
+                WHERE KullaniciID = ?
+            """, (yeni_sifre, kullanici_ıd))
+            self.conn.commit()
+        except Exception as e:
+            return f"Hata oluştu: Hata kodu {e}"
+
+    def isimle_arama(self, program_adi):
+        try:
+            self.cursor.execute("""
+                SELECT * FROM Program
+                WHERE ProgramAdi = ?
+            """, (program_adi,))
+            programinf = self.cursor.fetchone()
+            return programinf
+        except Exception as e:
+            return f"Hata oluştu: Hata kodu {e}"
+
+    def oneri(self, kullanici_ıd):
+        self.cursor.execute("""
+            SELECT t.TurAdi
+            FROM Tur t
+            INNER JOIN KullaniciTur kt ON t.KullaniciID = kt.KullaniciID
+            WHERE kt.KullaniciID = ?
+        """, (kullanici_ıd,))
+        turler = [satir [0] for satir in self.cursor.fetchall()]
+
+        oneriler = {}
+
+        for tur in turler:
+            self.cursor.execute("""
+                SELECT TOP 2 
+                    p.ProgramAdi
+                    p.Tip
+                    p.YayinYili
+                    ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+                FROM Program p
+                INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+                INNER JOIN Tur t ON pt.TurID  = t.TurID
+                LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+                WHERE t.TurAdi = ?
+                GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili
+                ORDER BY OrtalamPuan DESC
+            """, (tur,))
+            filmler = self.cursor.fetchall()
+            oneriler[tur] = []
+            for film in filmler:
+                oneriler[tur].append({
+                    "ProgramAdi": film[0],
+                    "Tip": film[1],
+                    "YayinYili": film[2],
+                    "Puan": film[3]
+                })
+
+        return oneriler
+
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
-    db.oturum_log("Ahmet")
+    print(db.sifre_güncelleme(3, 546852))
     db.disconnect()
 
 #Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
