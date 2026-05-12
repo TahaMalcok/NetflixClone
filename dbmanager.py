@@ -80,7 +80,7 @@ class DataBaseManager:
 
             self.cursor.execute("""
                 INSERT INTO Kullanici(RolID, Ad, Soyad, Ulke, Cinsiyet, DogumTarihi, Email, Sifre)
-                OUTPUT INSERTED.kullanici_id
+                OUTPUT INSERTED.KullanıcıID
                 Values(?, ?, ?, ?, ?, ?, ?, ?)
                 """, (rol_ıd, ad, soyad, ulke, cinsiyet, dogum_yili, email, sifre))
             yeni_kullanici_id = self.cursor.fetchone()[0]
@@ -97,204 +97,283 @@ class DataBaseManager:
         except Exception as e:
             return f"Hata oluştu. Hata kodu {e}"
 
-    def ortalama_puan_hesapla(self, program):
-        try:
-            self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
-            program_id = self.cursor.fetchone()
-
-            self.cursor.execute("""
-                SELECT ISNULL(AVG(CAST(Puan AS FLOAT)), 0)
-                FROM KullaniciProgram
-                WHERE program_id = ?
-                """, (program_id[0],))
-
-            ortalama = self.cursor.fetchone()[0]
-            return round(ortalama, 1)
-        except Exception as e:
-            return f"Hata oluştu: {e} hata kodu."
-
     def tum_programlari_listele(self):
-        try:
-            self.cursor.execute("""
-            SELECT
-                p.ProgramID
-                p.ProgramAdi,
-                p.Tip,
-                p.Aciklama,
-                p.YayinYili,
-                p.BolumSayisi,
-                ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
-            FROM Program p
-            LEFT JOIN KullaniciProgram kp ON p.program_id = kp.program_id
-            GROUP BY
-                p.ProgramID, p.ProgramAdi, p.Tip, p.Aciklama, p.YayinYili, p.BolumSayisi
-            ORDER BY p.ProgramAdi ASC
-            """)
-            satirlar = self.cursor.fetchall()
-            program_listesi = []
+        self.cursor.execute("""
+        SELECT
+            p.ProgramID,
+            p.ProgramAdi,
+            p.Tip,
+            p.YayinYili,
+            p.BolumSayisi,
+            ISNULL(STRING_AGG(t.TurAdi, ', ')) AS Turler,
+            ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+        FROM Program p
+        LEFT JOIN KullaniciProgram kp ON p.program_id = kp.program_id
+        LEFT JOIN ProgramTur pt ON p.program_id = pt.program_id
+        LEFT JOIN Tur t ON pt.tur_id = t.tur_id
+        GROUP BY
+            p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+        ORDER BY p.ProgramAdi ASC
+        """)
+        satirlar = self.cursor.fetchall()
+        program_listesi = []
 
-            for satir in satirlar:
-                program_listesi.append({
-                    "ProgramID": satir[0],
-                    "ProgramAdi": satir[1],
-                    "Tip": satir[2],
-                    "Aciklama": satir[3],
-                    "YayinYili": satir[4],
-                    "BolumSayisi": satir[5],
-                    "OrtalamaPuan": satir[6]
-                })
+        for satir in satirlar:
+            program_listesi.append({
+                "ProgramID": satir[0],
+                "ProgramAdi": satir[1],
+                "Tip": satir[2],
+                "YayinYili": satir[3],
+                "BolumSayisi": satir[4],
+                "Turler": satir[5],
+                "OrtalamaPuan": satir[6]
+            })
 
-            return program_listesi
-        except Exception as e:
-            return f"Hata oluştu: {e} hata kodu."
+        return program_listesi
 
     def ture_gore_arama(self, tur):
-        try:
-            self.cursor.execute("""
-                SELECT p.*
-                FROM Program
-                INNER JOIN ProgramTur pt ON p.program_id = pt.program_id
-                INNER JOIN Tur t ON pt.TurID = t.TurID
-                WHERE t.TurAdi = ?
-            """, (tur,))
-            return self.cursor.fetchall()
-        except Exception as e:
-            return f"Hata oluştu: {e} hata kodu."
+        self.cursor.execute("""
+         SELECT
+             p.ProgramID,
+             p.ProgramAdi,
+             p.Tip,
+             p.YayinYili,
+             p.BolumSayisi,
+             ISNULL(STRING_AGG(t.TurAdi, ', ')) AS Turler,
+             ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+         FROM Program p
+         LEFT JOIN KullaniciProgram kp ON p.program_id = kp.program_id
+         LEFT JOIN ProgramTur pt ON p.program_id = pt.program_id
+         LEFT JOIN Tur t ON pt.tur_id = t.tur_id
+         
+         WHERE p.ProgramID IN (
+            SELECT pt_alt.ProgramID FROM ProgramTur pt_alt
+            INNER JOIN Tur t_alt ON pt_alt.TurID = t_alt.TurID
+            WHERE TurAdi = ?
+         )
+         GROUP BY
+             p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+         ORDER BY p.ProgramAdi ASC
+         """, (tur,))
+
+        satirlar = self.cursor.fetchall()
+        program_listesi = []
+
+        for satir in satirlar:
+            program_listesi.append({
+                "ProgramID": satir[0],
+                "ProgramAdi": satir[1],
+                "Tip": satir[2],
+                "YayinYili": satir[3],
+                "BolumSayisi": satir[4],
+                "Turler": satir[5],
+                "OrtalamaPuan": satir[6]
+            })
+
+        return program_listesi
 
     def filtrele(self, tip):
-        try:
-            self.cursor.execute("SELECT * FROM Program WHERE Tip = ?", (tip,))
-            programlar = self.cursor.fetchall()
-
-            return programlar
-        except Exception as e:
-            return f"Hata oluştu: {e} hata kodu."
-
-    def detay(self, programadi):
         self.cursor.execute("""
-            SELECT ProgramID, Aciklama, Tip, YayinYili, BolumSayisi
-            FROM Program WHERE ProgramAdi = ?
-        """, (programadi,))
-        bilgiler = self.cursor.fetchone()
+               SELECT
+                   p.ProgramID,
+                   p.ProgramAdi,
+                   p.Tip,
+                   p.YayinYili,
+                   p.BolumSayisi,
+                   ISNULL(STRING_AGG(t.TurAdi, ', ')) AS Turler,
+                   ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+               FROM Program p
+               LEFT JOIN KullaniciProgram kp ON p.program_id = kp.program_id
+               LEFT JOIN ProgramTur pt ON p.program_id = pt.program_id
+               LEFT JOIN Tur t ON pt.tur_id = t.tur_id
+               WHERE p.Tip = ?
+               GROUP BY
+                   p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+               ORDER BY p.ProgramAdi ASC
+               """, (tip,))
+        satirlar = self.cursor.fetchall()
+        program_listesi = []
 
-        self.cursor.execute("""""")
+        for satir in satirlar:
+            program_listesi.append({
+                "ProgramID": satir[0],
+                "ProgramAdi": satir[1],
+                "Tip": satir[2],
+                "YayinYili": satir[3],
+                "BolumSayisi": satir[4],
+                "Turler": satir[5],
+                "OrtalamaPuan": satir[6]
+            })
 
-    def favori_ekle(self, program, kullanici_id):
-        try:
-            self.cursor.execute("SELECT program_id FROM Program WHERE ProgramAdi = ?", (program,))
-            program_id = self.cursor.fetchone()
-            self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullanici_id, program_id[0]))
-            self.conn.commit()
-        except Exception as e:
-            return f"Hata oluştu: {e} hata kodu."
+        return program_listesi
 
-    def puanlama(self, kullanici_id, program, puan):
-        if not ( 1 <= puan <= 10):
-            return "Hata: Puan 1 ile 10 arasında olmalı."
+    def detay(self, kullanici_id, program_id):
+        self.cursor.execute("""
+            SELECT 
+                p.ProgramAdi, p.Aciklama, p.Tip, p.YayinYili, p.BolumSayisi,
+                (STRING_AGG(t.TurAdi, ', ')) AS Turler,
+                ISNULL(AVG(CAST(kp.Puan AS Float)), 0) AS OrtalamaPuan,
+                (SELECT COUNT(*) FROM IzlemeLog WHERE ProgramID = p.ProgramID) AS ToplamIzlenme,
+                (SELECT Puan FROM KullaniciProgram WHERE ProgramID = p.ProgramID AND  KullaniciID = ?) AS KullaniciPuan,
+                (SELECT COUNT(*) FROM Favori WHERE ProgramID = p.ProgramID AND KullaniciID = ?) AS FavoriVarMi,
+                (SELECT AVG(Uzunluk) FROM Bolum WHERE ProgramID = p.ProgramID) AS OrtalamaUzunluk
+            FROM Program p 
+            LEFT JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+            LEFT JOIN Tur t ON pt.TurID = t.TurID
+            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+            WHERE p.ProgramID = ?
+            GROUP BY p.ProgramID, p.ProgramAdi, p.Aciklama, p.Tip, p.YayinYili, p.BolumSayisi
+        """, (kullanici_id, kullanici_id, program_id))
+        ana_veri = self.cursor.fetchone()
 
-        self.cursor.execute("SELECT program_id FROM Program WHERE ProgramAdi = ?", (program,))
-        program_id = self.cursor.fetchone()
+        self.cursor.execute("""
+            SELECT TOP 1 b.BolumNo, i.IzlenenSure, i.BittiMi
+            FROM IzlemeLog i
+            JOIN Bolum b ON i.BolumID = b.BolumID
+            WHERE i.KullaniciID = ? AND i.ProgramID = ?
+            ORDER BY i.IzlemeTarihi DESC
+        """, (kullanici_id, program_id))
+        son_izleme = self.cursor.fetchone()
 
-        try:
+        bilgiler = {
+            "ProgramID": program_id,
+            "ProgramAdi": ana_veri[0],
+            "Aciklama": ana_veri[1],
+            "Tip": ana_veri[2],
+            "YayinYili": ana_veri[3],
+            "BolumSayisi": ana_veri[4],
+            "Turler": ana_veri[5],
+            "OrtalamaPuan": ana_veri[6],
+            "ToplamIzlenme": ana_veri[7],
+            "KullaniciPuan": ana_veri[8] if ana_veri[8] else "Puan Verilmedi",
+            "Favori": True if ana_veri[9] > 0 else False,
+            "OrtalamaUzunluk": int(ana_veri[10]),
+            "DahaOnceIzlediMi": True if son_izleme else False,
+            "KalınanBolum": son_izleme[0] if son_izleme else 1,
+            "KalınanSure": son_izleme[1] if son_izleme else 0,
+            "SonIzlemeBittiMi": son_izleme[2] if son_izleme else False
+        }
+        return bilgiler
+
+    def bolum_listesi(self, program_id):
+        self.cursor.execute("SELECT BolumNo, Uzunluk FROM Bolum WHERE ProgramID = ? ORDER BY BolumNo", (program_id,))
+        return self.cursor.fetchall()
+
+    def favori_ekle(self, program_id, kullanici_id):
+        self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullanici_id, program_id))
+        self.conn.commit()
+
+    def favori_silme(self, program_id, kullanici_id):
+        self.cursor.execute("DELETE FROM Favori WHERE KullaniciID = ? AND ProgramID = ?", (kullanici_id, program_id))
+        self.conn.commit()
+
+    def favori_listele(self, kullanici_id):
+        self.cursor.execute("""
+            SELECT p.ProgramID, p.ProgramAdi
+            FROM Program p 
+            INNER JOIN Favori f ON f.ProgramID = p.ProgramID
+            WHERE f.KullaniciID = ?
+        """, (kullanici_id,))
+        filmler = self.cursor.fetchall()
+        bilgi = []
+        for film in filmler:
+            bilgi.append({
+                "ProgramID": film[0],
+                "ProgramAdi": film[1]
+            })
+        return bilgi
+
+    def puanlama(self, kullanici_id, program_id, puan):
+        self.cursor.execute("""
+            SELECT Puan FROM KullaniciProgram
+            WHERE kullanici_id = ? AND program_id = ?
+        """, (kullanici_id, program_id))
+        mevcutkayit = self.cursor.fetchone()
+
+        if mevcutkayit:
             self.cursor.execute("""
-                SELECT Puan FROM KullaniciProgram
-                WHERE kullanici_id = ? AND program_id = ?
-            """, (kullanici_id[0], program_id[0]))
-            mevcutkayit = self.cursor.fetchone()
-
-            if mevcutkayit:
-                self.cursor.execute("""
-                    UPDATE KullaniciProgram 
-                    SET Puan = ?
-                    WHERE KullaniciID = ? AND program_id = ?
-                """, (puan, kullanici_id, program_id))
-                mesaj = "Puanınız başarıyla güncelle."
-            else:
-                self.cursor.execute("""
-                    INSERT INTO KullaniciProgram(kullanici_id, program_id, Puan)
-                    VALUES (?, ?, ?)
-                """, (kullanici_id[0], program_id[0], puan))
-                mesaj = "Puanınız başarıyla kaydedildi."
-            self.conn.commit()
-            return mesaj
-        except Exception as e:
-            self.conn.rollback()
-            return f"Puanlama sırasında hata oluştu: {e}"
-
-    def izleme_log(self, kullanici_id, program_ad, bolum_no, izlenen_sure):
-        try:
+                UPDATE KullaniciProgram 
+                SET Puan = ?
+                WHERE KullaniciID = ? AND program_id = ?
+            """, (puan, kullanici_id, program_id))
+            mesaj = "Puanınız başarıyla güncelle."
+        else:
             self.cursor.execute("""
-                SELECT  ProgramID FROM Program
-                WHERE ProgramAdi = ?""", (program_ad,))
-            program_id = self.cursor.fetchone()[0]
+                INSERT INTO KullaniciProgram(kullanici_id, program_id, Puan)
+                VALUES (?, ?, ?)
+            """, (kullanici_id, program_id, puan))
+            mesaj = "Puanınız başarıyla kaydedildi."
+        self.conn.commit()
+        return mesaj
 
-            self.cursor.execute("""
-                SELECT BolumID, Uzunluk FROM Bolum
-                WHERE BolumNo = ? AND ProgramID = ?
-                """, (bolum_no, program_id))
-            bolum_id = self.cursor.fetchone()
+    def izleme_log(self, kullanici_id, program_id, bolum_no, izlenen_sure):
+        self.cursor.execute("""
+            SELECT BolumID, Uzunluk FROM Bolum
+            WHERE BolumNo = ? AND ProgramID = ?
+            """, (bolum_no, program_id))
+        bolum_id = self.cursor.fetchone()
 
+        bittimi = False
+        if bolum_id[1] == izlenen_sure:
+            bittimi = True
+        else:
             bittimi = False
-            if bolum_id[1] == izlenen_sure:
-                bittimi = True
-            else:
-                bittimi = False
 
-            self.cursor.execute("""
-                INSERT INTO IzlemeLog (KullaniciID, ProgramID, BolumID, IzlenenSure, IzlemeTarihi, BittiMi)
-                VALUES (?, ?, ?, ?, GETDATE(), ?)
-                """, (kullanici_id, program_id, bolum_id[0], izlenen_sure, bittimi))
-
-            self.conn.commit()
-
-        except Exception as e:
-            self.conn.rollback()
-            print(f"Hata meydana geldi. Hata kodu:{e}")
+        self.cursor.execute("""
+            INSERT INTO IzlemeLog (KullaniciID, ProgramID, BolumID, IzlenenSure, IzlemeTarihi, BittiMi)
+            VALUES (?, ?, ?, ?, GETDATE(), ?)
+            """, (kullanici_id, program_id, bolum_id[0], izlenen_sure, bittimi))
+        self.conn.commit()
 
     def profil_bilgileri(self, kullanici_id):
-        try:
-            self.cursor.execute("""
-                SELECT Ad, Soyad, Email, DogumTarihi, Ulke
-                FROM Kullanici 
-                WHERE KullaniciID = ?
-            """, (kullanici_id,))
-            bilgiler = self.cursor.fetchone()
+        self.cursor.execute("""
+            SELECT Ad, Soyad, Email, DogumTarihi, Ulke
+            FROM Kullanici 
+            WHERE KullaniciID = ?
+        """, (kullanici_id,))
+        bilgiler = self.cursor.fetchone()
 
-            self.cursor.execute("""
-                SELECT t.Turadi
-                FROM Tur t
-                INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
-                WHERE kt.KullaniciID = ?
-            """, (kullanici_id,))
-            turler = [satir[0] for satir in self.cursor.fetchall()]
+        self.cursor.execute("""
+            SELECT t.Turadi
+            FROM Tur t
+            INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
+            WHERE kt.KullaniciID = ?
+        """, (kullanici_id,))
+        turler = [satir[0] for satir in self.cursor.fetchall()]
 
-            self.cursor.execute("""
-                SELECT ISNULL(SUM(IzlenenSure), 0) FROM IzlemeLog
-                WHERE KullaniciID = ?
-            """, (kullanici_id,))
-            sure = self.cursor.fetchone()[0]
+        self.cursor.execute("""
+            SELECT ISNULL(SUM(IzlenenSure), 0) FROM IzlemeLog
+            WHERE KullaniciID = ?
+        """, (kullanici_id,))
+        sure = self.cursor.fetchone()[0]
 
-            self.cursor.execute("""
-                SELECT ISNULL(AVG(CAST(Puan AS FLOAT)), 0) 
-                FROM KullaniciProgram 
-                WHERE KullaniciID = ?
-            """, (kullanici_id,))
-            puan = self.cursor.fetchone()[0]
+        self.cursor.execute("""
+            SELECT ISNULL(AVG(CAST(Puan AS FLOAT)), 0) 
+            FROM KullaniciProgram 
+            WHERE KullaniciID = ?
+        """, (kullanici_id,))
+        puan = self.cursor.fetchone()[0]
 
-            profil_bilgileri = {
-                "Ad": bilgiler[0],
-                "Soyad": bilgiler[1],
-                "Email": bilgiler[2],
-                "DoğumTarihi": bilgiler[3].strftime("%d/%m/%Y"),
-                "Ülke": bilgiler[4],
-                "FavoriTürler": turler,
-                "İzlenenSüre": sure,
-                "OrtalamaPuan": puan,
-            }
+        self.cursor.execute("""
+            SELECT COUNT(DISTINCT ProgramID)
+            FROM IzlemeLog
+            WHERE KullaniciID = ?
+        """, (kullanici_id))
+        izlenen_sayi = self.cursor.fetchone()[0]
+         
+        profil_bilgileri = {
+            "Ad": bilgiler[0],
+            "Soyad": bilgiler[1],
+            "Email": bilgiler[2],
+            "DoğumTarihi": bilgiler[3].strftime("%d/%m/%Y"),
+            "Ülke": bilgiler[4],
+            "FavoriTürler": turler,
+            "İzlenenSüre": sure,
+            "OrtalamaPuan": puan,
+            "IzlenenSayi": izlenen_sayi
+        }
 
-            return profil_bilgileri
-        except Exception as e:
-            return f"Hata oluştu: Hata kodu {e}"
+        return profil_bilgileri
 
     def sifre_güncelleme(self, kullanici_ıd, yeni_sifre):
         try:
@@ -320,44 +399,59 @@ class DataBaseManager:
 
     def oneri(self, kullanici_ıd):
         self.cursor.execute("""
-            SELECT t.TurAdi
-            FROM Tur t
-            INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
-            WHERE kt.KullaniciID = ?
-        """, (kullanici_ıd,))
-        turler = [satir [0] for satir in self.cursor.fetchall()]
+                        SELECT t.TurAdi
+                        FROM Tur t
+                        INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
+                        WHERE kt.KullaniciID = ?
+                    """, (kullanici_ıd,))
+        turler = [satir[0] for satir in self.cursor.fetchall()]
 
         oneriler = {}
-
         for tur in turler:
             self.cursor.execute("""
-                SELECT TOP 2 
-                    p.ProgramAdi,
-                    p.Tip,
-                    p.YayinYili,
-                    ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
-                FROM Program p
-                INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
-                INNER JOIN Tur t ON pt.TurID  = t.TurID
-                LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
-                WHERE t.TurAdi = ?
-                GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili
-                ORDER BY OrtalamaPuan DESC
-            """, (tur,))
+                            SELECT TOP 2 
+                                p.ProgramID,
+                                p.ProgramAdi,
+                                p.Tip,
+                                p.YayinYili,
+                                p.BolumSayisi,
+                                ISNULL(STRING_AGG(t_all.TurAdi, ', '), 'Belirtilmemiş') AS Turler,
+                                ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+                            FROM Program p
+                            INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+                            INNER JOIN Tur t ON pt.TurID = t.TurID
+                            -- Bu kısım filmin DİĞER tüm türlerini de getirmemizi sağlar:
+                            LEFT JOIN ProgramTur pt_all ON p.ProgramID = pt_all.ProgramID
+                            LEFT JOIN Tur t_all ON pt_all.TurID = t_all.TurID
+                            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+                            WHERE t.TurAdi = ?
+                            GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+                            ORDER BY OrtalamaPuan DESC
+                        """, (tur,))
+
             filmler = self.cursor.fetchall()
             oneriler[tur] = []
+
             for film in filmler:
                 oneriler[tur].append({
-                    "ProgramAdi": film[0],
-                    "Tip": film[1],
-                    "YayinYili": film[2],
-                    "Puan": film[3]
+                    "ProgramID": film[0],
+                    "ProgramAdi": film[1],
+                    "Tip": film[2],
+                    "YayinYili": film[3],
+                    "BolumSayisi": film[4],
+                    "Turler": film[5],
+                    "OrtalamaPuan": film[6]
                 })
 
         return oneriler
 
-    def bolum_goster(self, programadi):
-        pass
+    def bolum_goster(self, program_id):
+        self.cursor.execute("""
+            SELECT BolumNo, Uzunluk
+            FROM Bolum
+            WHERE ProgramID = ?
+        """, (program_id,))
+        return self.cursor.fetchall()
 
     def içerik_ekle(self, programadi, tip, aciklama, yayinyili, bolumsayisi, turler):
         self.cursor.execute("""
@@ -381,12 +475,14 @@ class DataBaseManager:
             """, (programıd, turıd))
         self.conn.commit()
 
-    def içerik_sil(self, programadi):
-        self.cursor.execute("""
-            SELECT ProgramID FROM Program
-            WHERE ProgramAdi = ?
-        """, (programadi,))
-        programıd = self.cursor.fetchone()[0]
+    def içerik_sil(self, program_id):
+        self.cursor.execute("DELETE FROM IzlemeLog WHERE ProgramID = ? ", (program_id,))
+        self.cursor.execute("DELETE FROM Favori WHERE ProgramID = ?", (program_id,))
+        self.cursor.execute("DELETE FROM ProgramTur WHERE ProgramID = ? ", (program_id,))
+        self.cursor.execute("DELETE FROM Bolum WHERE ProgramID = ? ", (program_id,))
+        self.cursor.execute("DELETE FROM KullaniciProgram WHERE ProgramID = ?", (program_id,))
+        self.cursor.execute("DELETE FROM Program WHERE ProgramID = ?", (program_id,))
+        self.conn.commit()
 
     def tur_ekle(self, turadi):
         self.cursor.execute("""
@@ -397,20 +493,14 @@ class DataBaseManager:
 
     def tur_guncelleme(self, eskituradi, yenituradi):
         self.cursor.execute("""
-            SELECT TurID FROM Tur
+            UPDATE Tur
+            SET TurAdi = ?
             WHERE TurAdi = ?
-        """, (eskituradi,))
-        turid = self.cursor.fetchone()[0]
-
-        self.cursor.execute("""
-            UPDATE Tur SET Tur 
-        """)
+        """, (yenituradi, yenituradi))
+        self.conn.commit()
 
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
     db.tur_ekle("Folkhorror")
     db.disconnect()
-
-#Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
-#Kayıt olurken türlerin ıdleri ile alıyo isimleri ile almalı
