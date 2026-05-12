@@ -99,7 +99,7 @@ class DataBaseManager:
 
     def ortalama_puan_hesapla(self, program):
         try:
-            self.cursor.execute("SELECT program_id FROM Program WHERE ProgramAdi = ?", (program,))
+            self.cursor.execute("SELECT ProgramID FROM Program WHERE ProgramAdi = ?", (program,))
             program_id = self.cursor.fetchone()
 
             self.cursor.execute("""
@@ -117,7 +117,7 @@ class DataBaseManager:
         try:
             self.cursor.execute("""
             SELECT
-                p.program_id,
+                p.ProgramID
                 p.ProgramAdi,
                 p.Tip,
                 p.Aciklama,
@@ -127,11 +127,24 @@ class DataBaseManager:
             FROM Program p
             LEFT JOIN KullaniciProgram kp ON p.program_id = kp.program_id
             GROUP BY
-                p.program_id, p.ProgramAdi, p.Tip, p.Aciklama, p.YayinYili, p.BolumSayisi
+                p.ProgramID, p.ProgramAdi, p.Tip, p.Aciklama, p.YayinYili, p.BolumSayisi
             ORDER BY p.ProgramAdi ASC
             """)
+            satirlar = self.cursor.fetchall()
+            program_listesi = []
 
-            return self.cursor.fetchall()
+            for satir in satirlar:
+                program_listesi.append({
+                    "ProgramID": satir[0],
+                    "ProgramAdi": satir[1],
+                    "Tip": satir[2],
+                    "Aciklama": satir[3],
+                    "YayinYili": satir[4],
+                    "BolumSayisi": satir[5],
+                    "OrtalamaPuan": satir[6]
+                })
+
+            return program_listesi
         except Exception as e:
             return f"Hata oluştu: {e} hata kodu."
 
@@ -156,6 +169,15 @@ class DataBaseManager:
             return programlar
         except Exception as e:
             return f"Hata oluştu: {e} hata kodu."
+
+    def detay(self, programadi):
+        self.cursor.execute("""
+            SELECT ProgramID, Aciklama, Tip, YayinYili, BolumSayisi
+            FROM Program WHERE ProgramAdi = ?
+        """, (programadi,))
+        bilgiler = self.cursor.fetchone()
+
+        self.cursor.execute("""""")
 
     def favori_ekle(self, program, kullanici_id):
         try:
@@ -300,7 +322,7 @@ class DataBaseManager:
         self.cursor.execute("""
             SELECT t.TurAdi
             FROM Tur t
-            INNER JOIN KullaniciTur kt ON t.KullaniciID = kt.KullaniciID
+            INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
             WHERE kt.KullaniciID = ?
         """, (kullanici_ıd,))
         turler = [satir [0] for satir in self.cursor.fetchall()]
@@ -310,9 +332,9 @@ class DataBaseManager:
         for tur in turler:
             self.cursor.execute("""
                 SELECT TOP 2 
-                    p.ProgramAdi
-                    p.Tip
-                    p.YayinYili
+                    p.ProgramAdi,
+                    p.Tip,
+                    p.YayinYili,
                     ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
                 FROM Program p
                 INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
@@ -320,7 +342,7 @@ class DataBaseManager:
                 LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
                 WHERE t.TurAdi = ?
                 GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili
-                ORDER BY OrtalamPuan DESC
+                ORDER BY OrtalamaPuan DESC
             """, (tur,))
             filmler = self.cursor.fetchall()
             oneriler[tur] = []
@@ -334,10 +356,60 @@ class DataBaseManager:
 
         return oneriler
 
+    def bolum_goster(self, programadi):
+        pass
+
+    def içerik_ekle(self, programadi, tip, aciklama, yayinyili, bolumsayisi, turler):
+        self.cursor.execute("""
+            INSERT INTO Program (ProgramAdi, Tip, Aciklama, YayinYili, BolumSayisi)
+            OUTPUT INSERTED.ProgramID
+            VALUES (?, ?, ?, ?, ?)
+        """, (programadi, tip, aciklama, yayinyili, bolumsayisi))
+        programıd = self.cursor.fetchone()[0]
+        self.conn.commit()
+
+        for tur in turler:
+            self.cursor.execute("""
+                SELECT TurID FROM Tur
+                WHERE TurAdi = ?
+            """, (tur,))
+            turıd = self.cursor.fetchone()[0]
+
+            self.cursor.execute("""
+                INSERT INTO ProgramTur (ProgramID, TurID)
+                VALUES (?, ?)
+            """, (programıd, turıd))
+        self.conn.commit()
+
+    def içerik_sil(self, programadi):
+        self.cursor.execute("""
+            SELECT ProgramID FROM Program
+            WHERE ProgramAdi = ?
+        """, (programadi,))
+        programıd = self.cursor.fetchone()[0]
+
+    def tur_ekle(self, turadi):
+        self.cursor.execute("""
+            INSERT INTO Tur (TurAdi)
+            VALUES (?)
+        """, (turadi,))
+        self.conn.commit()
+
+    def tur_guncelleme(self, eskituradi, yenituradi):
+        self.cursor.execute("""
+            SELECT TurID FROM Tur
+            WHERE TurAdi = ?
+        """, (eskituradi,))
+        turid = self.cursor.fetchone()[0]
+
+        self.cursor.execute("""
+            UPDATE Tur SET Tur 
+        """)
+
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
-    print(db.sifre_güncelleme(3, 546852))
+    db.tur_ekle("Folkhorror")
     db.disconnect()
 
 #Hep normal kullanıcı olarak giriş yapıyo yönetici olarak yapmıyo.
