@@ -56,7 +56,7 @@ class DataBaseManager:
             return None
 
     def kayit_yap(self, ad, soyad, email, sifre, dogum_yili, cinsiyet, ulke, secilen_turler):
-        self.cursor.execute("SELECT kullanici_id FROM Kullanici WHERE Email = ?", (email,))
+        self.cursor.execute("SELECT KullaniciID FROM Kullanici WHERE Email = ?", (email,))
         if self.cursor.fetchone():
             return "Bu mail adresi ile oluşturulmuş bir hesap bulunmakta."
         if len(sifre) < 6 or len(sifre) > 50:
@@ -64,28 +64,20 @@ class DataBaseManager:
         if len(secilen_turler) != 3:
                return "3 tane favori türünüzü seçmeniz gerekiyor."
 
-        try:
-            dogum_tarihi = datetime.strptime(dogum_yili, "%Y-%m-%d").date()
-            bugun = datetime.now().date()
-            if dogum_tarihi > bugun:
-                return "Geçerli bir doğum tarihi giriniz."
-        except ValueError:
-            return "Geçerli formatta bir tarih giriniz. (YYYY-AA-GG)"
-
-        rol_ıd = 1
-
+        rol_id = 1
+        print("1")
         self.cursor.execute("""
-            INSERT INTO Kullanici(RolID, Ad, Soyad, Ulke, Cinsiyet, DogumTarihi, Email, Sifre)
+            INSERT INTO Kullanici (RolID, Ad, Soyad, Ulke, Cinsiyet, DogumTarihi, Email, Sifre)
             OUTPUT INSERTED.KullaniciID
             Values(?, ?, ?, ?, ?, ?, ?, ?)
-            """, (rol_ıd, ad, soyad, ulke, cinsiyet, dogum_yili, email, sifre))
+            """, (rol_id, ad, soyad, ulke, cinsiyet, dogum_yili, email, sifre))
         yeni_kullanici_id = self.cursor.fetchone()[0]
-
+        print("2")
         for tur in secilen_turler:
             self.cursor.execute("SELECT TurID FROM Tur WHERE TurAdi = ?", (tur,))
-            tur_ıd = self.cursor.fetchone()[0]
-
-            self.cursor.execute("INSERT INTO KullaniciTur(kullanici_id, TurID) VALUES (?, ?)", (yeni_kullanici_id, tur_ıd))
+            tur_id = self.cursor.fetchone()[0]
+            print("3")
+            self.cursor.execute("INSERT INTO KullaniciTur(KullaniciID, TurID) VALUES (?, ?)", (yeni_kullanici_id, tur_id))
 
         self.conn.commit()
         return "Kayıt başarılı."
@@ -253,8 +245,13 @@ class DataBaseManager:
         return self.cursor.fetchall()
 
     def favori_ekle(self, program_id, kullanici_id):
-        self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullanici_id, program_id))
-        self.conn.commit()
+        self.cursor.execute("SELECT * FROM Favori WHERE KullaniciID= ? AND ProgramID = ? ", (kullanici_id, program_id))
+        varmi = self.cursor.fetchone()
+        if varmi:
+            return "Zaten favorilerinizde."
+        else:
+            self.cursor.execute("INSERT INTO Favori VALUES (?, ?)", (kullanici_id, program_id))
+            self.conn.commit()
 
     def favori_silme(self, program_id, kullanici_id):
         self.cursor.execute("DELETE FROM Favori WHERE KullaniciID = ? AND ProgramID = ?", (kullanici_id, program_id))
@@ -279,9 +276,10 @@ class DataBaseManager:
     def puanlama(self, kullanici_id, program_id, puan):
         self.cursor.execute("""
             SELECT Puan FROM KullaniciProgram
-            WHERE kullanici_id = ? AND program_id = ?
+            WHERE KullaniciID = ? AND ProgramID = ?
         """, (kullanici_id, program_id))
         mevcutkayit = self.cursor.fetchone()
+
 
         if mevcutkayit:
             self.cursor.execute("""
@@ -292,7 +290,7 @@ class DataBaseManager:
             mesaj = "Puanınız başarıyla güncelle."
         else:
             self.cursor.execute("""
-                INSERT INTO KullaniciProgram(kullanici_id, program_id, Puan)
+                INSERT INTO KullaniciProgram(KullaniciID, ProgramID, Puan)
                 VALUES (?, ?, ?)
             """, (kullanici_id, program_id, puan))
             mesaj = "Puanınız başarıyla kaydedildi."
@@ -435,36 +433,49 @@ class DataBaseManager:
 
         return program_listesi
 
-    def oneri(self, kullanici_ıd):
+    def kullanici_turleri(self, kullanici_id):
+        self.cursor.execute("""
+            SELECT t.TurAdi
+            FROM Tur t
+            INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
+            WHERE kt.KullaniciID = ?
+        """, (kullanici_id,))
+
+        return [satir[0] for satir in self.cursor.fetchall()]
+
+    def oneri(self, kullanici_id):
         self.cursor.execute("""
                         SELECT t.TurAdi
                         FROM Tur t
                         INNER JOIN KullaniciTur kt ON t.TurID = kt.TurID
                         WHERE kt.KullaniciID = ?
-                    """, (kullanici_ıd,))
+                    """, (kullanici_id,))
         turler = [satir[0] for satir in self.cursor.fetchall()]
 
         oneriler = {}
         for tur in turler:
             self.cursor.execute("""
-                            SELECT TOP 2 
-                                p.ProgramID,
-                                p.ProgramAdi,
-                                p.Tip,
-                                p.YayinYili,
-                                p.BolumSayisi,
-                                STRING_AGG(t_all.TurAdi, ', ') AS Turler,
-                                ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
-                            FROM Program p
-                            INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
-                            INNER JOIN Tur t ON pt.TurID = t.TurID
-                            LEFT JOIN ProgramTur pt_all ON p.ProgramID = pt_all.ProgramID
-                            LEFT JOIN Tur t_all ON pt_all.TurID = t_all.TurID
-                            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
-                            WHERE t.TurAdi = ?
-                            GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
-                            ORDER BY OrtalamaPuan DESC
-                        """, (tur,))
+                SELECT TOP 2 
+                p.ProgramID,
+                p.ProgramAdi,
+                p.Tip,
+                p.YayinYili,
+                p.BolumSayisi,
+                (
+                    SELECT STRING_AGG(t_alt.TurAdi, ', ') 
+                    FROM ProgramTur pt_alt
+                    INNER JOIN Tur t_alt ON pt_alt.TurID = t_alt.TurID
+                    WHERE pt_alt.ProgramID = p.ProgramID
+                ) AS Turler,
+                ISNULL(AVG(CAST(kp.Puan AS FLOAT)), 0) AS OrtalamaPuan
+                FROM Program p
+                INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+                INNER JOIN Tur t ON pt.TurID = t.TurID
+                LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+                WHERE t.TurAdi = ?
+                GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+                ORDER BY OrtalamaPuan DESC
+            """, (tur,))
 
             filmler = self.cursor.fetchall()
             oneriler[tur] = []
@@ -551,7 +562,6 @@ class DataBaseManager:
             self.cursor.execute("DELETE FROM Tur WHERE TurID = ?", (turid,))
             self.conn.commit()
 
-
     #program ıd ile çalıştım ama gerekirse ada çeviririz.
     def program_tur_ekle(self, eklenecektur, program_id):
         self.cursor.execute("""
@@ -578,12 +588,37 @@ class DataBaseManager:
             self.conn.commit()
 
     def program_aciklama_degis(self, program_id, aciklama):
-        pass
+        self.cursor.execute("""
+            UPDATE TABLE Program 
+            SET Aciklama = ?
+            WHERE ProgramID = ?
+        """, (aciklama, program_id))
+        self.conn.commit()
 
     def program_yil_degis(self, program_id, yil):
-       pass
+        self.cursor.execute("""  
+            UPDATE TABLE Program
+            SET YayinYili = ?
+            WHERE ProgramID = ?
+       """, (program_id, yil))
+        self.conn.commit()
 
     def bolum_sayisi_degis(self, bolumsayisi):
+        pass
+
+    def kullanicilari_listele(self):
+        self.cursor.execute("SELECT Ad, Soyad FROM Kullanici")
+        satirlar = self.cursor.fetchall
+        kullanicilar = []
+
+        for satir in satirlar:
+            kullanicilar.append({
+                "Ad": satir[0],
+                "Soyad": satir[1]
+            })
+        return kullanicilar
+
+    def kullanici_detay(self):
         pass
 
 if __name__ == "__main__":

@@ -18,37 +18,36 @@ QWidget { background-color: black; color: white; font-family: Arial; }
 QLineEdit {
     background-color: #222; color: white;
     border: 1px solid #444; border-radius: 4px;
-    padding: 9px; font-size: 15px;
+    padding: 9px; font-size: 16px;
 }
 QLineEdit:focus { border: 1px solid red; }
 QPushButton {
     background-color: red; color: white;
     border-radius: 4px; padding: 9px;
-    font-size: 15px; font-weight: bold;
+    font-size: 16px; font-weight: bold;
 }
 QPushButton:hover { background-color: #cc0000; }
-QPushButton#ikincil { background-color: #333; font-size: 15px; }
+QPushButton#ikincil { background-color: #333; font-size: 16px; }
 QPushButton#ikincil:hover { background-color: #444; }
 QComboBox {
     background-color: #222; color: white;
     border: 1px solid #444; border-radius: 4px;
-    padding: 9px; font-size: 15px;
+    padding: 9px; font-size: 16px;
 }
 QComboBox QAbstractItemView {
     background-color: #222; color: white;
     selection-background-color: #444;
 }
-QCheckBox { color: white; font-size: 13px; }
+QCheckBox { color: white; font-size: 16px; }
 QLabel { color: white; }
 QScrollBar:vertical { background: #111; width: 9px; }
 QScrollBar::handle:vertical { background: #444; border-radius: 4px; }
 QSpinBox {
     background-color: #222; color: white;
     border: 1px solid #444; border-radius: 4px;
-    padding: 6px; font-size: 15px;
+    padding: 6px; font-size: 16px;
 }
 """
-
 def _alan(placeholder, sifre=False, yukseklik=49):
     w = QLineEdit()
     w.setPlaceholderText(placeholder)
@@ -98,7 +97,7 @@ class GirisEkrani(QWidget):
         self.setStyleSheet(DIZAYN)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(240, 0, 240, 0)
+        layout.setContentsMargins(225, 0, 225, 0)
 
         baslik = QLabel("NETFLIX")
         baslik.setAlignment(Qt.AlignCenter)
@@ -136,10 +135,10 @@ class GirisEkrani(QWidget):
         sifre = self.sifre.text().strip()
 
         if not email or not sifre:
-            QMessageBox.warning(self, "Mail ve şifre boş olamaz.")
+            QMessageBox.warning(self, "", "Mail ve şifre boş olamaz.")
             return
         if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w{2,}$", email):
-            QMessageBox.warning(self, "Geçerli bir mail adresi girin.")
+            QMessageBox.warning(self, "" ,"Geçerli bir mail adresi girin.")
             return
         kullanici = self.ana.db.giris_yap(email, sifre)
 
@@ -150,7 +149,7 @@ class GirisEkrani(QWidget):
             self.mail.clear()
             self.sifre.clear()
         else:
-            QMessageBox.warning(self, "Hata", "Mail veya şifre yanlış.")
+            QMessageBox.warning(self, "", "Mail veya şifre yanlış.")
 
 class KayitEkrani(QWidget):
     TUR_LISTESI = [
@@ -171,10 +170,10 @@ class KayitEkrani(QWidget):
         icerik = QWidget()
         icerik.setStyleSheet("background-color: black;")
         layout = QVBoxLayout(icerik)
-        layout.setContentsMargins(270, 36, 270, 36)
+        layout.setContentsMargins(256, 36, 256, 36)
         layout.setSpacing(6)
 
-        baslik = QLabel("Hesap Oluştur")
+        baslik = QLabel("Hesap oluştur")
         baslik.setAlignment(Qt.AlignCenter)
         baslik.setFont(QFont("Press Start 2P", 24, QFont.Bold))
         baslik.setStyleSheet("color: red; margin-bottom: 16px;")
@@ -217,7 +216,7 @@ class KayitEkrani(QWidget):
 
         layout.addSpacing(12)
 
-        kayit_btn = QPushButton("Kayıt Ol")
+        kayit_btn = QPushButton("Kayıt ol")
         kayit_btn.setFixedHeight(49)
         kayit_btn.clicked.connect(self._kayit)
         layout.addWidget(kayit_btn)
@@ -249,13 +248,13 @@ class KayitEkrani(QWidget):
         if not all([ad, soyad, mail, sifre, sifre2, dogum, ulke]):
             QMessageBox.warning(self, "Tüm alanları doldurun."); return
         if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w{2,}$", mail):
-            QMessageBox.warning(self, "Uyarı", "Geçerli bir mail girin."); return
+            QMessageBox.warning(self, "", "Geçerli bir mail girin."); return
         if sifre != sifre2:
-            QMessageBox.warning(self, "Uyarı", "Şifreler eşleşmiyor."); return
+            QMessageBox.warning(self, "", "Şifreler eşleşmiyor."); return
         if cinsiyet == "Seçiniz":
-            QMessageBox.warning(self, "Uyarı", "Cinsiyet seçin."); return
+            QMessageBox.warning(self, "", "Cinsiyet seçin."); return
         if len(turler) != 3:
-            QMessageBox.warning(self, "Uyarı", "Tam 3 tür seçin."); return
+            QMessageBox.warning(self, "", "Tam 3 tür seçin."); return
 
         try:
             dt = datetime.strptime(dogum, "%d/%m/%Y")
@@ -272,9 +271,8 @@ class KayitEkrani(QWidget):
             kullanici = self.ana.db.giris_yap(mail, sifre)
             if kullanici:
                 self.ana.aktif_kullanici = kullanici
-                oneriler = self.ana.db.oneri(kullanici[0])
-                self.ana.oneri_ekrani.onerileri_yukle(oneriler, turler)
-                self.ana.ekran_goster(2)
+                self.ana.ana_sayfa.icerikleri_yukle()
+                self.ana.ekran_goster(3)
         else:
             QMessageBox.warning(self, "Uyarı", str(sonuc))
 
@@ -341,9 +339,10 @@ class OneriEkrani(QWidget):
                 kl = QVBoxLayout(kart)
                 t = QLabel(tur_adi)
                 t.setStyleSheet("color: red; font-size: 12px; font-weight: bold;")
-                a = QLabel(film.get("ProgramAdi", ""))
+                program_adi = film.get("ProgramAdi")
+                a = QLabel(str(program_adi) if program_adi else "İsimsiz İçerik")
                 a.setFont(QFont("Press Start 2P", 11, QFont.Bold))
-                b = QLabel(f"{film.get('Tip','')}  •  {film.get('YayinYili','')}  •  ⭐ {film.get('Puan',0)}/10")
+                b = QLabel(f"{film.get('Tip','')}  •  {film.get('YayinYili','')}  •  ⭐ {film.get('OrtalamaPuan',0)}/10")
                 b.setStyleSheet("color: #aaa; font-size: 12px;")
                 kl.addWidget(t); kl.addWidget(a); kl.addWidget(b)
                 self.icerik_layout.addWidget(kart)
@@ -359,7 +358,6 @@ class AnaSayfa(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Üst Bar ──
         ust = QWidget()
         ust.setFixedHeight(64)
         ust.setStyleSheet("background-color: #111; border-bottom: 1px solid #222;")
@@ -367,11 +365,11 @@ class AnaSayfa(QWidget):
         ul.setContentsMargins(25, 0, 25, 0)
 
         logo = QLabel("NETFLIX")
-        logo.setFont(QFont("Arial Black", 22, QFont.Bold))
+        logo.setFont(QFont("Press Start 2P", 22, QFont.Bold))
         logo.setStyleSheet("color: red;")
 
         self.arama = QLineEdit()
-        self.arama.setPlaceholderText("İçerik ara...")
+        self.arama.setPlaceholderText("İçerik ara.")
         self.arama.setFixedSize(200, 36)
         self.arama.textChanged.connect(self._filtrele)
 
@@ -390,6 +388,12 @@ class AnaSayfa(QWidget):
         cikis_btn.setFixedSize(70, 36)
         cikis_btn.clicked.connect(self._cikis)
 
+        oneri_btn = QPushButton("Öneriler")
+        oneri_btn.setObjectName("ikincil")
+        oneri_btn.setFixedSize(100, 36)
+
+        oneri_btn.clicked.connect(self._onerilere_git)
+
         ul.addWidget(logo)
         ul.addStretch()
         ul.addWidget(self.arama)
@@ -399,9 +403,10 @@ class AnaSayfa(QWidget):
         ul.addWidget(profil_btn)
         ul.addSpacing(6)
         ul.addWidget(cikis_btn)
+        ul.addWidget(oneri_btn)
+        ul.addSpacing(6)
         layout.addWidget(ust)
 
-        # ── İçerik Grid ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: black;")
@@ -412,6 +417,12 @@ class AnaSayfa(QWidget):
         self.grid_layout.setContentsMargins(25, 25, 25, 25)
         scroll.setWidget(self.grid_widget)
         layout.addWidget(scroll)
+
+    def _onerilere_git(self):
+        oneriler = self.ana.db.oneri(self.ana.aktif_kullanici[0])
+        turler = self.ana.db.kullanici_turleri(self.ana.aktif_kullanici[0])
+        self.ana.oneri_ekrani.onerileri_yukle(oneriler, turler)
+        self.ana.ekran_goster(2)
 
     def _cikis(self):
         self.ana.aktif_kullanici = None
@@ -484,7 +495,7 @@ class AnaSayfa(QWidget):
         )
 
         ad_lbl = QLabel(ad)
-        ad_lbl.setFont(QFont("Arial Black", 9, QFont.Bold))
+        ad_lbl.setFont(QFont("Press Start 2P", 9, QFont.Bold))
         ad_lbl.setWordWrap(True)
         ad_lbl.setStyleSheet("color: white;")
 
@@ -551,17 +562,16 @@ class DetayDialog(QDialog):
         baslik.setWordWrap(True)
         layout.addWidget(baslik)
 
-        layout.addWidget(QLabel(f"{row[2]}  •  {row[4]}"))
-
-        ort_puan = round(float(row[6]), 1) if row[6] else 0.0
-        self._satir(layout, "Ortalama Puan", f"{ort_puan}/10")
-        self._satir(layout, "Bölüm Sayısı",  str(row[5]))
-
-        if row[3] and str(row[3]).strip():
-            ac = QLabel(str(row[3]))
-            ac.setWordWrap(True)
-            ac.setStyleSheet("color: #ccc; font-size: 12px; margin-top: 6px;")
-            layout.addWidget(ac)
+        layout.addWidget(QLabel(f"{row.get('Tip', '')}  •  {row.get('YayinYili', '')}"))
+        ort_puan = round(float(row.get("OrtalamaPuan", 0) or 0), 1)
+        self._satir(layout, "Bölüm Sayısı", str(row.get("BolumSayisi", "")))
+        if self.detay_verisi:
+            aciklama = self.detay_verisi.get("Aciklama", "")
+            if aciklama and str(aciklama).strip():
+                ac = QLabel(str(aciklama))
+                ac.setWordWrap(True)
+                ac.setStyleSheet("color: #ccc; font-size: 12px; margin-top: 6px;")
+                layout.addWidget(ac)
 
         puan_lay = QHBoxLayout()
         self.puan_spin = QSpinBox()
@@ -607,7 +617,7 @@ class DetayDialog(QDialog):
         if sonuc:
             QMessageBox.information(self, "Bilgi", str(sonuc))
         else:
-            QMessageBox.information(self, "Favoriye eklendi.")
+            QMessageBox.information(self, "asd","Favoriye eklendi.")
 
     def _puan_ver(self):
         puan = self.puan_spin.value()
@@ -657,7 +667,7 @@ class ProfilEkrani(QWidget):
             ("Doğum Tarihi", bilgi.get("DoğumTarihi", "")),
             ("Ülke",     bilgi.get("Ülke", "")),
             ("Favori Türler", ", ".join(bilgi.get("FavoriTürler", []))),
-            ("Toplam İzleme (dk)", str(bilgi.get("İzlenenSüre", 0))),
+            ("Toplam İzleme (dk)", str(bilgi.get("IzlenenSure", 0))),
             ("Ortalama Puan", str(bilgi.get("OrtalamaPuan", 0))),
         ]
 
@@ -677,11 +687,11 @@ class ProfilEkrani(QWidget):
             self.layout_main.addWidget(satir)
 
         self.layout_main.addSpacing(10)
-        sifre_lbl = QLabel("Şifre Güncelle")
+        sifre_lbl = QLabel("Şifre güncelle")
         sifre_lbl.setStyleSheet("color: red; font-weight: bold; font-size: 15px;")
         self.layout_main.addWidget(sifre_lbl)
 
-        self.yeni_sifre = _alan("Yeni Şifre", sifre=True)
+        self.yeni_sifre = _alan("Yeni şifre", sifre=True)
         self.layout_main.addWidget(self.yeni_sifre)
 
         guncelle_btn = QPushButton("Şifreyi Güncelle")
@@ -700,7 +710,7 @@ class ProfilEkrani(QWidget):
         if len(yeni) < 6:
             QMessageBox.warning(self, "Şifre en az 6 karakter olmalı.")
             return
-        sonuc = self.ana.db.sifre_güncelleme(self.ana.aktif_kullanici[0], yeni)
+        sonuc = self.ana.db.sifre_güncelle(self.ana.aktif_kullanici[0], yeni)
         if sonuc:
             QMessageBox.warning(self, "Hata", str(sonuc))
         else:
