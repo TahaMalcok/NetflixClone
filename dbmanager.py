@@ -37,7 +37,6 @@ class DataBaseManager:
         self.conn.commit()
 
     def giris_yap(self, email, sifre):
-
         self.cursor.execute("""
             SELECT KullaniciID, RolID, Ad, Soyad
             FROM Kullanici
@@ -48,7 +47,7 @@ class DataBaseManager:
         print(kullanici)
 
         if kullanici:
-            self.cursor.execute("INSERT INTO OturumLog (kullanici_id) VALUES (?)", (kullanici[0],))
+            self.cursor.execute("INSERT INTO OturumLog (KullaniciID) VALUES (?)", (kullanici[0],))
             self.conn.commit()
             print(f"Hoşgeldin {kullanici[2]} {kullanici[3]}")
             return kullanici
@@ -536,6 +535,54 @@ class DataBaseManager:
             WHERE TurAdi = ?
         """, (yenituradi, eskituradi))
         self.conn.commit()
+
+    def tur_sil(self, turadi):
+        self.cursor.execute("""
+            SELECT TurID FROM Tur WHERE TurAdi = ?
+        """, (turadi,))
+        turid = self.cursor.fetchone()[0]
+
+        self.cursor.execute("SELECT * FROM ProgramTur WHERE TurID = ?", (turid,))
+        varmi = self.cursor.fetchone()
+
+        if varmi:
+            return "Bu türe ait programlar bulunduğu için silinemez."
+        else:
+            self.cursor.execute("DELETE FROM Tur WHERE TurID = ?", (turid,))
+            self.conn.commit()
+
+    def program_tur_ekle(self, eklenecektur, program_id):
+        self.cursor.execute("""
+            SELECT TurID FROM Tur WHERE TurAdi = ?
+        """, (eklenecektur,))
+        turid = self.cursor.fetchone()[0]
+
+        if not turid:
+            return "Bu tür sistemde zaten var."
+
+        self.cursor.execute("""
+            SELECT * FROM ProgramTur
+            WHERE ProgramID = ? AND TurID = ?
+        """, (program_id, turid))
+        varmi = self.cursor.fetchone()
+
+        if varmi:
+            return "Bu film zaten bu türe sahip."
+        else:
+            self.cursor.execute("""
+                INSERT INTO ProgramTur (ProgramID, TurID
+                VALUES (?, ?) 
+            """, (program_id, turid))
+            self.conn.commit()
+
+    def program_aciklama_degis(self, program_id, aciklama):
+        pass
+
+    def program_yil_degis(self, program_id, yil):
+       pass
+
+    def bolum_sayisi_degis(self, bolumsayisi):
+        pass
 
 if __name__ == "__main__":
     db = DataBaseManager()
