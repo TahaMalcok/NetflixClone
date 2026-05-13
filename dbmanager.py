@@ -551,6 +551,8 @@ class DataBaseManager:
             self.cursor.execute("DELETE FROM Tur WHERE TurID = ?", (turid,))
             self.conn.commit()
 
+
+    #program ıd ile çalıştım ama gerekirse ada çeviririz.
     def program_tur_ekle(self, eklenecektur, program_id):
         self.cursor.execute("""
             SELECT TurID FROM Tur WHERE TurAdi = ?
