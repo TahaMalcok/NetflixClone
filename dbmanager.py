@@ -383,7 +383,7 @@ class DataBaseManager:
             WHERE KullaniciID = ?
         """, (kullanici_id,))
         izlenen_sayi = self.cursor.fetchone()[0]
-         
+
         profil_bilgileri = {
             "Ad": bilgiler[0],
             "Soyad": bilgiler[1],
@@ -532,14 +532,17 @@ class DataBaseManager:
         self.conn.commit()
 
     def içerik_sil(self, program_id):
-        self.cursor.execute("DELETE FROM IzlemeLog WHERE ProgramID = ? ", (program_id,))
-        self.cursor.execute("DELETE FROM Favori WHERE ProgramID = ?", (program_id,))
-        self.cursor.execute("DELETE FROM ProgramTur WHERE ProgramID = ? ", (program_id,))
-        self.cursor.execute("DELETE FROM Bolum WHERE ProgramID = ? ", (program_id,))
-        self.cursor.execute("DELETE FROM KullaniciProgram WHERE ProgramID = ?", (program_id,))
-        self.cursor.execute("DELETE FROM Program WHERE ProgramID = ?", (program_id,))
-        self.conn.commit()
-
+        try:
+            self.cursor.execute("DELETE FROM IzlemeLog WHERE ProgramID = ? ", (program_id,))
+            self.cursor.execute("DELETE FROM Favori WHERE ProgramID = ?", (program_id,))
+            self.cursor.execute("DELETE FROM ProgramTur WHERE ProgramID = ? ", (program_id,))
+            self.cursor.execute("DELETE FROM Bolum WHERE ProgramID = ? ", (program_id,))
+            self.cursor.execute("DELETE FROM KullaniciProgram WHERE ProgramID = ?", (program_id,))
+            self.cursor.execute("DELETE FROM Program WHERE ProgramID = ?", (program_id,))
+            self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            return "İçerik silinirken hata oluştu. Veriler korundu."
     def tur_ekle(self, turadi):
         self.cursor.execute("""
             SELECT * FROM Tur
@@ -619,9 +622,6 @@ class DataBaseManager:
        """, (yil, program_id))
         self.conn.commit()
 
-    def bolum_sayisi_degis(self, bolumsayisi):
-        pass
-
     def kullanicilari_listele(self):
         self.cursor.execute("SELECT Ad, Soyad, KullaniciID FROM Kullanici")
         satirlar = self.cursor.fetchall()
@@ -638,7 +638,7 @@ class DataBaseManager:
     def en_cok_izlenen(self):
         self.cursor.execute("""
             SELECT  TOP 10
-                p.ProgramAdi
+                p.ProgramAdi,
                 COUNT(i.İzlemeID) AS OynatilmaSayisi
             FROM Program
             LEFT JOIN IzlemeLog i ON p.ProgramID = i.ProgramID
@@ -750,5 +750,4 @@ class DataBaseManager:
 if __name__ == "__main__":
     db = DataBaseManager()
     db.connect()
-    db.tur_ekle("Folkhorror")
     db.disconnect()
