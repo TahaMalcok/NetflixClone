@@ -242,7 +242,15 @@ class DataBaseManager:
 
     def bolum_listesi(self, program_id):
         self.cursor.execute("SELECT BolumNo, Uzunluk FROM Bolum WHERE ProgramID = ? ORDER BY BolumNo", (program_id,))
-        return self.cursor.fetchall()
+        satirlar = self.cursor.fetchall()
+        bolumler = []
+
+        for satir in satirlar:
+            bolumler.append({
+                "BolumNo": satir[0],
+                "Sure": satir[1]
+            })
+        return  bolumler
 
     def favori_ekle(self, program_id, kullanici_id):
         self.cursor.execute("SELECT * FROM Favori WHERE KullaniciID= ? AND ProgramID = ? ", (kullanici_id, program_id))
@@ -534,10 +542,19 @@ class DataBaseManager:
 
     def tur_ekle(self, turadi):
         self.cursor.execute("""
-            INSERT INTO Tur (TurAdi)
-            VALUES (?)
+            SELECT * FROM Tur
+            WHERE TurAdi = ?
         """, (turadi,))
-        self.conn.commit()
+        varmi = self.cursor.fetchone()
+
+        if varmi:
+            return "Hata bu tür zaten sistemde var."
+        else:
+            self.cursor.execute("""
+                INSERT INTO Tur (TurAdi)
+                VALUES (?)
+            """, (turadi,))
+            self.conn.commit()
 
     def tur_guncelleme(self, eskituradi, yenituradi):
         self.cursor.execute("""
@@ -562,16 +579,15 @@ class DataBaseManager:
             self.cursor.execute("DELETE FROM Tur WHERE TurID = ?", (turid,))
             self.conn.commit()
 
-    #program ıd ile çalıştım ama gerekirse ada çeviririz.
     def program_tur_ekle(self, eklenecektur, program_id):
         self.cursor.execute("""
             SELECT TurID FROM Tur WHERE TurAdi = ?
         """, (eklenecektur,))
-        turid = self.cursor.fetchone()[0]
+        sonuc = self.cursor.fetchone()
+        if not sonuc:
+            return "Bu tür sistemde bulunamadı."
 
-        if not turid:
-            return "Bu tür sistemde zaten var."
-
+        turid = sonuc[0]
         self.cursor.execute("""
             SELECT * FROM ProgramTur
             WHERE ProgramID = ? AND TurID = ?
@@ -582,14 +598,14 @@ class DataBaseManager:
             return "Bu film zaten bu türe sahip."
         else:
             self.cursor.execute("""
-                INSERT INTO ProgramTur (ProgramID, TurID
+                INSERT INTO ProgramTur (ProgramID, TurID)
                 VALUES (?, ?) 
             """, (program_id, turid))
             self.conn.commit()
 
     def program_aciklama_degis(self, program_id, aciklama):
         self.cursor.execute("""
-            UPDATE TABLE Program 
+            UPDATE Program 
             SET Aciklama = ?
             WHERE ProgramID = ?
         """, (aciklama, program_id))
@@ -597,29 +613,139 @@ class DataBaseManager:
 
     def program_yil_degis(self, program_id, yil):
         self.cursor.execute("""  
-            UPDATE TABLE Program
+            UPDATE Program
             SET YayinYili = ?
             WHERE ProgramID = ?
-       """, (program_id, yil))
+       """, (yil, program_id))
         self.conn.commit()
 
     def bolum_sayisi_degis(self, bolumsayisi):
         pass
 
     def kullanicilari_listele(self):
-        self.cursor.execute("SELECT Ad, Soyad FROM Kullanici")
-        satirlar = self.cursor.fetchall
+        self.cursor.execute("SELECT Ad, Soyad, KullaniciID FROM Kullanici")
+        satirlar = self.cursor.fetchall()
         kullanicilar = []
 
         for satir in satirlar:
             kullanicilar.append({
                 "Ad": satir[0],
-                "Soyad": satir[1]
+                "Soyad": satir[1],
+                "KullaniciID": satir[2]
             })
         return kullanicilar
 
-    def kullanici_detay(self):
-        pass
+    def en_cok_izlenen(self):
+        self.cursor.execute("""
+            SELECT  TOP 10
+                p.ProgramAdi
+                COUNT(i.İzlemeID) AS OynatilmaSayisi
+            FROM Program
+            LEFT JOIN IzlemeLog i ON p.ProgramID = i.ProgramID
+            GROUP BY p.ProgramAdi
+            ORDER BY OynatilmaSayisi DESC
+        """)
+        satirlar = self.cursor.fetchall()
+        filmler = []
+
+        for satir in satirlar:
+            filmler.append({
+                "ProgramAdi": satir[0],
+                "IzlenmeSayisi": satir[1]
+            })
+        return filmler
+
+    def en_yuksek_puanli(self):
+        self.cursor.execute("""
+            SELECT TOP 10
+                p.ProgramAdi,
+                ISNULL(AVG(CAST(kp.Puan AS Float)), 0) AS OrtalamaPuan
+            FROM Program p 
+            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+            GROUP BY ProgramAdi, p.ProgramID
+            ORDER BY OrtalamaPuan DESC
+        """)
+        satirlar = self.cursor.fetchall()
+        filmler = []
+
+        for satir in satirlar:
+            filmler.append({
+                "ProgramAdi": satir[0],
+                "Puan": round(satir[1], 1)
+            })
+        return filmler
+
+    def en_cok_izlenen_turler(self):
+        self.cursor.execute("""
+            SELECT TOP 3
+                t.TurAdi,
+                COUNT(i.IzlemeID) AS OynatilmaSayisi
+            FROM Program p
+            INNER JOIN IzlemeLog i ON p.ProgramID = i.ProgramID
+            INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+            INNER JOIN Tur t ON pt.TurID = t.TurID
+            GROUP BY TurAdi
+            ORDER BY OynatilmaSayisi DESC
+        """)
+        satirlar = self.cursor.fetchall()
+        turler = []
+
+        for satir in satirlar:
+            turler.append({
+                "TurAdi": satir[0],
+                "OynatilmaSayisi": satir[1]
+            })
+        return turler
+
+    def toplam_izlenme(self):
+        self.cursor.execute("""
+            SELECT COUNT(*)
+            FROM IzlemeLog
+        """)
+        return self.cursor.fetchone()[0]
+
+    def toplam_puan(self):
+        self.cursor.execute("""
+            SELECT COUNT(Puan)
+            FROM KullaniciProgram
+        """)
+        return self.cursor.fetchone()[0]
+
+    def toplam_icerik(self):
+        self.cursor.execute("""
+            SELECT COUNT(ProgramID)
+            FROM Program
+        """)
+        return self.cursor.fetchone()[0]
+
+    def toplam_izlenen_sure(self):
+        self.cursor.execute("""
+            SELECT ISNULL(SUM(IzlenenSure), 0)
+            FROM IzlemeLog
+        """)
+        return self.cursor.fetchone()[0]
+
+    def aktif_kullanicilar(self):
+        self.cursor.execute("""
+            SELECT TOP 5
+                k.Ad,
+                k.Soyad,
+                COUNT(OturumID) AS GirisSayisi
+            FROM Kullanici k 
+            INNER JOIN OturumLog ol ON k.KullaniciID = ol.KullaniciID
+            GROUP BY k.Ad, k.Soyad, k.KullaniciID
+            ORDER BY GirisSayisi DESC
+        """)
+        satirlar = self.cursor.fetchall()
+        kullanicilar = []
+
+        for satir in satirlar:
+            kullanicilar.append({
+                "Ad": satir[0],
+                "Soyad": satir[1],
+                "GirisSayisi": satir[2]
+            })
+        return kullanicilar
 
 if __name__ == "__main__":
     db = DataBaseManager()
