@@ -1,5 +1,6 @@
 import pyodbc
 from datetime import datetime
+from bolumols import uzunluk
 
 class DataBaseManager:
     def __init__(self):
@@ -214,9 +215,9 @@ class DataBaseManager:
         self.cursor.execute("""
             SELECT TOP 1 b.BolumNo, i.IzlenenSure, i.BittiMi
             FROM IzlemeLog i
-            JOIN Bolum b ON i.BolumID = b.BolumID
+            LEFT JOIN Bolum b ON i.BolumID = b.BolumID
             WHERE i.KullaniciID = ? AND i.ProgramID = ?
-            ORDER BY i.IzlemeTarihi DESC
+            ORDER BY i.LogID DESC
         """, (kullanici_id, program_id))
         son_izleme = self.cursor.fetchone()
 
@@ -234,7 +235,7 @@ class DataBaseManager:
             "Favori": True if ana_veri[9] > 0 else False,
             "OrtalamaUzunluk": int(ana_veri[10]),
             "DahaOnceIzlediMi": True if son_izleme else False,
-            "KalınanBolum": son_izleme[0] if son_izleme else 1,
+            "KalınanBolum": son_izleme[0] if (son_izleme and son_izleme[0] is not None) else 1,
             "KalınanSure": son_izleme[1] if son_izleme else 0,
             "SonIzlemeBittiMi": son_izleme[2] if son_izleme else False
         }
@@ -267,17 +268,34 @@ class DataBaseManager:
 
     def favori_listele(self, kullanici_id):
         self.cursor.execute("""
-            SELECT p.ProgramID, p.ProgramAdi
+            SELECT 
+                p.ProgramID,
+                p.ProgramAdi,
+                p.Tip,
+                p.YayinYili,
+                p.BolumSayisi,
+                STRING_AGG(t.TurAdi, ', ') AS Turler,
+                ISNULL(AVG(CAST(kp.Puan AS Float)), 0) AS OrtalamaPuan
             FROM Program p 
             INNER JOIN Favori f ON f.ProgramID = p.ProgramID
+            LEFT JOIN KullaniciProgram kp ON p.ProgramID = kp.ProgramID
+            LEFT JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
+            LEFT JOIN Tur t ON pt.TurID = t.TurID
             WHERE f.KullaniciID = ?
+            GROUP BY p.ProgramID, p.ProgramAdi, p.Tip, p.YayinYili, p.BolumSayisi
+            ORDER BY p.ProgramAdi ASC 
         """, (kullanici_id,))
-        filmler = self.cursor.fetchall()
+        satirlar = self.cursor.fetchall()
         bilgi = []
-        for film in filmler:
+        for satir in satirlar:
             bilgi.append({
-                "ProgramID": film[0],
-                "ProgramAdi": film[1]
+                "ProgramID": satir[0],
+                "ProgramAdi": satir[1],
+                "Tip": satir[2],
+                "YayinYili": satir[3],
+                "BolumSayisi": satir[4],
+                "Turler": satir[5],
+                "OrtalamaPuan": satir[6]
             })
         return bilgi
 
@@ -310,18 +328,41 @@ class DataBaseManager:
             SELECT BolumID, Uzunluk FROM Bolum
             WHERE BolumNo = ? AND ProgramID = ?
             """, (bolum_no, program_id))
-        bolum_id = self.cursor.fetchone()
+        bolum = self.cursor.fetchone()
 
+        bolum_id = None
         bittimi = False
-        if bolum_id[1] == izlenen_sure:
-            bittimi = True
+        if bolum:
+            bolum_id = bolum[0]
+            uzunluk = bolum[1]
+            if izlenen_sure >= uzunluk:
+                bittimi = True
         else:
-            bittimi = False
+            pass
 
-        self.cursor.execute("""
-            INSERT INTO IzlemeLog (KullaniciID, ProgramID, BolumID, IzlenenSure, IzlemeTarihi, BittiMi)
-            VALUES (?, ?, ?, ?, GETDATE(), ?)
-            """, (kullanici_id, program_id, bolum_id[0], izlenen_sure, bittimi))
+        if bolum_id is not None:
+            self.cursor.execute("""
+                SELECT LogID FROM IzlemeLog 
+                WHERE KullaniciID = ? AND BolumID = ?
+            """, (kullanici_id, bolum_id))
+        else:
+            self.cursor.execute("""
+                SELECT LogID FROM IzlemeLog 
+                WHERE KullaniciID = ? AND ProgramID = ? AND BolumID IS NULL
+            """, (kullanici_id, program_id))
+        varmi = self.cursor.fetchone()
+
+        if varmi:
+            self.cursor.execute("""
+                UPDATE IzlemeLog 
+                SET IzlenenSure = ?, IzlemeTarihi = GETDATE(), BittiMi = ?
+                WHERE LogID = ?
+            """, (izlenen_sure, bittimi, varmi[0]))
+        else:
+            self.cursor.execute("""
+                INSERT INTO IzlemeLog (KullaniciID, ProgramID, BolumID, IzlenenSure, IzlemeTarihi, BittiMi)
+                VALUES (?, ?, ?, ?, GETDATE(), ?)
+            """, (kullanici_id, program_id, bolum_id, izlenen_sure, bittimi))
         self.conn.commit()
 
     def izleme_gecmisi(self, kullanici_id):
@@ -543,6 +584,7 @@ class DataBaseManager:
         except Exception as e:
             self.conn.rollback()
             return "İçerik silinirken hata oluştu. Veriler korundu."
+
     def tur_ekle(self, turadi):
         self.cursor.execute("""
             SELECT * FROM Tur
@@ -639,8 +681,8 @@ class DataBaseManager:
         self.cursor.execute("""
             SELECT  TOP 10
                 p.ProgramAdi,
-                COUNT(i.İzlemeID) AS OynatilmaSayisi
-            FROM Program
+                COUNT(i.LogID) AS OynatilmaSayisi
+            FROM Program p
             LEFT JOIN IzlemeLog i ON p.ProgramID = i.ProgramID
             GROUP BY p.ProgramAdi
             ORDER BY OynatilmaSayisi DESC
@@ -679,7 +721,7 @@ class DataBaseManager:
         self.cursor.execute("""
             SELECT TOP 3
                 t.TurAdi,
-                COUNT(i.IzlemeID) AS OynatilmaSayisi
+                COUNT(i.LogID) AS OynatilmaSayisi
             FROM Program p
             INNER JOIN IzlemeLog i ON p.ProgramID = i.ProgramID
             INNER JOIN ProgramTur pt ON p.ProgramID = pt.ProgramID
